@@ -1,0 +1,16 @@
+You are a read-only reader. Use only browser_navigate, browser_evaluate, browser_wait_for and browser_close. You type nothing, click nothing, post nothing, like nothing.
+
+Visit these pages one after another and collect entries. After every navigate, wait 3 seconds (browser_wait_for time 3).
+
+1. https://x.com/search?q=(hormuz%20OR%20kharg%20OR%20%22strait%20of%20hormuz%22%20OR%20UKMTO%20OR%20%22iran%20oman%22)%20-filter%3Areplies&f=live
+   evaluate: () => Array.from(document.querySelectorAll('article[data-testid="tweet"]')).slice(0,20).map(a=>{const t=a.querySelector('[data-testid="tweetText"]');const u=Array.from(a.querySelectorAll('a[href*="/status/"]')).map(x=>x.getAttribute('href')).find(h=>/\/status\/\d+$/.test(h))||'';const tm=a.querySelector('time');return {source:'X search',text:t?t.innerText.replace(/\s+/g,' ').slice(0,280):'',url:u?'https://x.com'+u:'',time:tm?tm.getAttribute('datetime'):''}}).filter(x=>x.text)
+2. The same evaluate function (source = '@account') for each of these profiles, at most 6 entries each: https://x.com/UK_MTO https://x.com/TankerTrackers https://x.com/gCaptain https://x.com/IrnaEnglish https://x.com/FMofOman https://x.com/CENTCOM https://x.com/JavierBlas
+   If a profile does not exist or is empty: skip it and note it in "errors".
+3. https://www.ukmto.org/recent-incidents
+   evaluate: () => Array.from(document.querySelectorAll('h3')).slice(0,6).map(h=>{const p=h.parentElement&&h.parentElement.querySelector('p');return {source:'UKMTO',text:(h.innerText+': '+(p?p.innerText:'')).replace(/\s+/g,' ').slice(0,400),url:'https://www.ukmto.org/recent-incidents',time:''}}).filter(x=>/UKMTO/.test(x.text))
+4. https://www.reddit.com/r/geopolitics/new/
+   evaluate: () => Array.from(document.querySelectorAll('a[slot="title"], shreddit-post')).slice(0,15).map(e=>({source:'r/geopolitics',text:(e.getAttribute('post-title')||e.innerText||'').replace(/\s+/g,' ').slice(0,200),url:e.getAttribute('permalink')?'https://www.reddit.com'+e.getAttribute('permalink'):(e.href||''),time:''})).filter(x=>x.text)
+   If a login page appears: skip it and note it in "errors".
+
+Finally browser_close. Answer ONLY with a JSON object, without explanation and without a Markdown fence:
+{"entries":[{"source":"...","text":"...","url":"...","time":"..."}], "errors":["..."]}

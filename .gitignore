@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+*.local
+*.bak
+.DS_Store
+
+# Runtime data, caches, logs and lock files. Nothing under data/ is committed.
+data/*
+!data/README.md
+
+# Live configs. Only the files in depot/examples/ are committed.
+depot/bet.json
+depot/buy_alert.json
+
+# Browser automation artifacts (the browser round is retired)
+.playwright-mcp/
