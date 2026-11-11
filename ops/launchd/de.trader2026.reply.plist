@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template. ops/launchd/install.sh replaces __REPO__ and __PYTHON__. -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>de.trader2026.reply</string>
+  <key>ProgramArguments</key><array>
+    <string>__PYTHON__</string>
+    <string>__REPO__/src/reply_bot.py</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__</string>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>__PATH__</string></dict>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__REPO__/data/reply_launchd.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/data/reply_launchd.log</string>
+</dict></plist>

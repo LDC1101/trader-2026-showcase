@@ -1,0 +1,64 @@
+# Buy alert: every 15 minutes on weekdays, check whether Brent has reached the trigger in
+# depot/buy_alert.json and, if so, send the finished order (WKN, limit, units) via Telegram.
+# No account access and no order placement (Rule 10): the player types the order by hand.
+#
+# Reference copy. During the season this file lived in .github/workflows/ of the private ops
+# repo; it was disabled on 11 Nov 2026. It is kept outside .github/ here so it never runs.
+#
+# It ran in GitHub Actions instead of the local Watch because the MacBook slept during the
+# day (15 Oct 2026: no Watch run between 5:00 and 18:00 Berlin).
+# The state of the last alert lives in the Actions cache: the default GITHUB_TOKEN may not
+# write repository variables (HTTP 403, measured 16 Oct 2026).
+name: Buy alert
+on:
+  schedule:
+    - cron: "*/15 6-20 * * 1-5"   # UTC; the script itself checks 8:00-21:45 Berlin
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "live (sends), probe (prints only, fakes Brent just at the trigger) or activation (sends a start message)"
+        default: "live"
+permissions:
+  contents: read
+concurrency:
+  group: buy-alert
+  cancel-in-progress: false
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet numpy
+      - name: Restore state of the last alert
+        uses: actions/cache/restore@v4
+        with:
+          path: state.json
+          key: buy-alert-state-${{ github.run_id }}
+          restore-keys: buy-alert-state-
+      - name: Check and alert
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          if [ "$MODE" = "probe" ]; then
+            python3 src/buy_alert.py --test --probe-trigger
+            echo "State from cache: $(cat state.json 2>/dev/null || echo none)"
+            # The probe also exercises saving state (harmless value, counts for no day)
+            echo '{"date": "2000-01-01", "epoch": 0, "count": 0, "probe": "'"$GITHUB_RUN_ID"'"}' > state.json
+            touch state.json.new
+          elif [ "$MODE" = "activation" ]; then
+            python3 src/buy_alert.py --activation
+          else
+            python3 src/buy_alert.py --state-in state.json --state-out state.json
+          fi
+      - name: Save state
+        if: hashFiles('state.json.new') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: state.json
+          key: buy-alert-state-${{ github.run_id }}

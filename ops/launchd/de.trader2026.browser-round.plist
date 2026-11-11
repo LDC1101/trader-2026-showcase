@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template. ops/launchd/install.sh replaces __REPO__ and __PYTHON__. -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>de.trader2026.browser-round</string>
+  <key>ProgramArguments</key><array>
+    <string>__PYTHON__</string>
+    <string>__REPO__/src/browser_round.py</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__</string>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>__PATH__</string></dict>
+  <!-- Retired 22 Oct 2026, see src/browser_round.py. Not installed by install.sh. -->
+  <key>StartInterval</key><integer>3600</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>__REPO__/data/browser-round_launchd.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/data/browser-round_launchd.log</string>
+</dict></plist>
