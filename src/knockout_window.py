@@ -20,6 +20,8 @@ respective window (Brownian bridge), not only checks at sample points.
 Usage:    python3 src/knockout_window.py
 """
 
+import argparse
+
 import numpy as np
 
 RNG = np.random.default_rng(7)
@@ -61,6 +63,8 @@ def survives(rng, n, days, distance, daily_sigma, window):
 
 
 def main():
+    argparse.ArgumentParser(description="Survival of BEST/Classic (knock-out 9:00-17:30) vs X-BEST/X-Classic "
+                            "(8:00-22:00) turbos, simulated. No options; runs in about 20 seconds.").parse_args()
     print("=" * 76)
     print("Knock-out window: BEST/Classic (9:00-17:30) vs X-BEST/X-Classic (8:00-22:00)")
     print("=" * 76)

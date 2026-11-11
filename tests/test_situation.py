@@ -21,7 +21,12 @@ class FeedParser(unittest.TestCase):
         e = feed_entries(RSS)
         self.assertEqual(len(e), 2)
         self.assertEqual(e[0], ("U.S. strikes 3 Iranian oil tankers", "Sat, 05 Sep 2026"))
-        self.assertEqual(e[1][0], "Fed &amp; rates")
+        self.assertEqual(e[1][0], "Fed & rates")
+
+    def test_entity_inside_cdata_is_decoded(self):
+        # CNBC, 11 Nov 2026: titles showed "Nvidia&apos;s" to the player
+        rss = "<rss><item><title><![CDATA[Nvidia&apos;s Huang]]></title></item></rss>"
+        self.assertEqual(feed_entries(rss)[0][0], "Nvidia's Huang")
 
     def test_atom_title_with_attribute_and_updated(self):
         e = feed_entries(ATOM)

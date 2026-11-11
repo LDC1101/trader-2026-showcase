@@ -133,6 +133,9 @@ def best_tier(alerts):
     return best if best < 5 else None
 
 
+MEASUREMENTS = ("KNOCK-OUT", "BRENT", "POLYMARKET", "COT")   # BRENT also covers BRENT FAST
+
+
 def may_trigger(alerts):
     """Gate: an action (buy/close) only if a tier-1 source is present or at
     least two different tier-2 sources."""
@@ -140,9 +143,12 @@ def may_trigger(alerts):
     for block in alerts:
         lines = str(block).splitlines()
         if not any(source_from_item(z) for z in lines):
-            # Blocks without a source tag are our own measurements (KNOCK-OUT,
-            # BRENT, POLYMARKET, COT, REPLACEMENT ORDER): data, tier 1.
-            s1.add(lines[0][:20] if lines else "data")
+            # Blocks without a source tag are the Watch's own output. Only its
+            # measurements are data and count as tier 1 (strategy/90-sources.md).
+            # Reminders, order cards and untagged headlines are not evidence; before
+            # 11 Nov 2026 the Monday "LIMIT ORDERS" reminder let any S3 headline pass.
+            if lines and lines[0].startswith(MEASUREMENTS):
+                s1.add(lines[0][:20])
             continue
         for line in lines:
             q = source_from_item(line)
@@ -210,10 +216,18 @@ def check():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "--check":
+    import argparse
+    ap = argparse.ArgumentParser(description="Source register: tier of a source, register check, allowed search domains.")
+    ap.add_argument("names", nargs="*", help="source names or domains to rate, e.g. Reuters irna.ir")
+    ap.add_argument("--check", action="store_true", help="report sources in the feeds and accounts that are not in the register")
+    ap.add_argument("--domains", action="store_true", help="print the tier 1-2 domains the reply bot may search")
+    a = ap.parse_args()
+    if a.check:
         sys.exit(check())
-    if len(sys.argv) > 1 and sys.argv[1] == "--domains":
+    if a.domains:
         print("\n".join(allowed_domains()))
         sys.exit(0)
-    for a in sys.argv[1:]:
-        print(a, "-> tier", tier(a), TIERS.get(tier(a)))
+    if not a.names:
+        ap.print_help()
+    for n in a.names:
+        print(n, "-> tier", tier(n), TIERS.get(tier(n)))

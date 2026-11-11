@@ -74,5 +74,83 @@ class ActionWords(unittest.TestCase):
         self.assertFalse(watch.wants_action("ACTION: check: whether the strait closure holds"))
 
 
+class Triggers(unittest.TestCase):
+    def test_whole_words_only(self):
+        for title in ("Oil steady, according to traders watching Iran", "Iran to determine its quota",
+                      "Iran oil dealer arrested", "Iran striker joins club"):
+            self.assertIsNone(watch.ACTION_RE.search(title), title)
+
+    def test_inflections_still_match(self):
+        for title in ("Iran and US sign accord", "Tankers attacked near Hormuz", "Strait reopened",
+                      "Mines found in the strait", "Peace talks resume", "US strikes Iranian site",
+                      "Envoys meet in Muscat", "Negotiations stall", "End of the war in sight"):
+            self.assertIsNotNone(watch.ACTION_RE.search(title), title)
+
+
+class Headers(unittest.TestCase):
+    ALERTS = ["BRENT 101.20 $: +4.1% since the last alert (97.20).",
+              "HEADLINES\n• [IRNA English|S3] Strait reopened, deal signed"]
+
+    def test_fallback_without_council_never_acts(self):
+        # consult_or_assess rewrites buy/close to "check (without council)"
+        result = ("SIGNAL: medium long Brent\nWHAT: x\nDEPOTS: A | B\nABORT: no (S1)\n"
+                  "ACTION: check (without council): buy: turbo call Brent\nEVIDENCED: no (without council)")
+        header, _ = watch.header_for(result, self.ALERTS)
+        self.assertEqual(header, "WATCH")
+
+    def test_council_buy_with_measurement_acts(self):
+        result = "SIGNAL: strong long Brent\nACTION: buy: turbo call Brent, 1 % distance\nEVIDENCED: yes"
+        self.assertEqual(watch.header_for(result, self.ALERTS)[0], "ALERT: ACT")
+
+    def test_buy_on_state_media_alone_is_downgraded(self):
+        result = "SIGNAL: weak long Brent\nACTION: buy: turbo call Brent\nEVIDENCED: no"
+        header, text = watch.header_for(result, ["HEADLINES\n• [IRNA English|S3] Strait reopened"])
+        self.assertEqual(header, "WATCH (source not yet confirmed)")
+        self.assertIn("source unconfirmed", text)
+
+    def test_failed_replacement_card_reaches_the_player(self):
+        alerts = ["KNOCK-OUT A FG6MRT (Brent long): low since the last run 104.06, barrier 104.74, price now 105.70.",
+                  "REPLACEMENT ORDER DEPOT A: could not be determined; run python3 src/morning_card.py --depot A --text-only"]
+        t = watch.for_player("", NOW, "", alerts)
+        self.assertIn("could not be determined", t)
+
+
+class Memory(unittest.TestCase):
+    def test_keeps_newest_not_alphabetically_last(self):
+        fresh, memory = watch.remember(["zeta", "beta"], ["alpha", "beta", "gamma"], 3)
+        self.assertEqual(fresh, ["alpha", "gamma"])
+        self.assertEqual(memory, ["beta", "alpha", "gamma"])   # "zeta" was the oldest
+        fresh, _ = watch.remember(memory, ["alpha"], 3)
+        self.assertEqual(fresh, [])
+
+
+class Cot(unittest.TestCase):
+    @staticmethod
+    def row(name, mm_long, mm_short, swap_long=900, swap_short=100):
+        r = [f'"{name}"', "261103", "2026-11-03", "06765T", "NYME", "00", "067",
+             "5000", "10", "20", str(swap_long), str(swap_short), "5", str(mm_long), str(mm_short)] + ["0"] * 10
+        return ",".join(r)
+
+    def test_managed_money_columns(self):
+        txt = self.row("BRENT LAST DAY - NEW YORK MERCANTILE EXCHANGE", 700, 200)
+        self.assertEqual(watch.parse_cot(txt)["Brent"], dict(date="2026-11-03", net=500))
+
+    def test_micro_gold_does_not_overwrite_gold(self):
+        txt = "\n".join([self.row("GOLD - COMMODITY EXCHANGE INC.", 300, 100),
+                         self.row("MICRO GOLD - COMMODITY EXCHANGE INC.", 5, 9)])
+        self.assertEqual(watch.parse_cot(txt)["Gold"]["net"], 200)
+
+
+class Basis(unittest.TestCase):
+    def test_futures_extremes_are_mapped_onto_spot(self):
+        # 7 Sep 2026: gold future 4,444, spot 4,395
+        f = watch.basis_factor(4395, 4444)
+        self.assertLess(4455 * f, 4450)   # a futures high of 4,455 is no spot knock-out at 4,450
+
+    def test_different_instrument_is_rejected(self):
+        self.assertIsNone(watch.basis_factor(92.0, 104.0))
+        self.assertEqual(watch.basis_factor(None, 104.0), 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()

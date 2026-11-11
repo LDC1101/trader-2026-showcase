@@ -19,7 +19,7 @@ the state (last report) lives in the Actions cache (state.json, key
 buy-alert-state-<run>; the default token may not write repository variables,
 16 Oct 2026 HTTP 403); locally in data/buy_alert_state.json.
 
-Price: derived from the SG call prices (sg_products.implied_spot), i.e. for exactly
+Price: derived from the SG call prices (sg_products.spots_by_contract), i.e. for exactly
 the contract SG quotes the product against. If SG fails: Yahoo BZ=F, with the ask
 then estimated.
 
@@ -118,13 +118,15 @@ def quote_sg(k):
     import sg_products as sg
     calls = sg.products(k["asset"], 47, 0)
     puts = sg.products(k["asset"], 47, 1)
-    s_c, fx_c, s_p, fx_p = sg.implied_spot(calls, puts)
-    S = (s_c + s_p) / 2 if (s_c and s_p) else (s_c or s_p)
-    if not S:
+    spots = sg.spots_by_contract(calls, puts)
+    if not spots:
         raise RuntimeError("SG: underlying price cannot be derived")
     px = calls if k.get("direction", "call") == "call" else puts
     product = next((p for p in px if p.get("Code") == k["wkn"]), None)
-    return dict(S=S, fx=fx_c or fx_p or FX_FALLBACK,
+    # The price of the contract the target product is on, not a fit across contracts
+    c = spots.get((product or {}).get("AssetName")) or next(iter(spots.values()))
+    S = c["S"]
+    return dict(S=S, fx=c["fx"] or FX_FALLBACK,
                 ask=(product or {}).get("Offer") or None, bid=(product or {}).get("Bid") or None,
                 barrier=(product or {}).get("BarrierTurboCertificate") or (product or {}).get("Strike") or None,
                 source="SG")

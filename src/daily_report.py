@@ -26,7 +26,6 @@ in the files).
 import argparse
 import datetime as dt
 import io
-import json
 import os
 import re
 import sys

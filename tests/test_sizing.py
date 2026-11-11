@@ -9,6 +9,12 @@ from sizing import limits, FEE_STOCK, FEE_DERIVATIVE  # noqa: E402
 class RuleCalculator(unittest.TestCase):
     """Figures from the Monday plan, the project notes and the game rules."""
 
+    def test_rejects_zero_ask_and_depot(self):
+        with self.assertRaises(ValueError):
+            limits(100_000, 0, leveraged=True)
+        with self.assertRaises(ValueError):
+            limits(0, 2.0, leveraged=True)
+
     def test_order_card_fc8qp6(self):
         # (20,000 - 3.90 fee) / ask 1.98 = 10,099 units. The platform counts the
         # fee towards the volume: on 7 Sep 2026, 4,040 x 4.95 = 19,998 was rejected.

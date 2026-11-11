@@ -21,7 +21,6 @@ Usage:    python3 src/morning_card.py --test     # shows, does not send
 import argparse
 import datetime as dt
 import io
-import json
 import math
 import os
 import re
@@ -31,7 +30,7 @@ import zoneinfo
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-from sg_products import products, implied_spot  # noqa: E402
+from sg_products import products, spots_by_contract  # noqa: E402
 from watch import send_telegram, log, open_positions, load_state, polymarket  # noqa: E402
 from situation import load_json, write_json  # noqa: E402
 
@@ -95,25 +94,29 @@ def candidate(asset, callput, lo, hi, target):
     px = products(asset, BEST, callput)
     calls = px if callput == 0 else products(asset, BEST, 0)
     puts = px if callput == 1 else products(asset, BEST, 1)
-    s_c, _, s_p, _ = implied_spot(calls, puts)
-    S = (s_c + s_p) / 2 if (s_c and s_p) else (s_c or s_p)
-    if not S:
+    # Price per contract: SG lists several futures months at once (sg_products.spots_by_contract)
+    spots = spots_by_contract(calls, puts)
+    if not spots:
         return None, None
     best, seen = None, set()
     for p in px:
         if p.get("Code") in seen:
             continue
         seen.add(p.get("Code"))
+        c = spots.get(p.get("AssetName"))
         bar = p.get("BarrierTurboCertificate") or p.get("Strike") or 0
         ask = p.get("Offer") or 0
-        if bar <= 0 or ask < MIN_ASK:
+        if not c or bar <= 0 or ask < MIN_ASK:
             continue
+        S = c["S"]
         dist = (S - bar) / S if callput == 0 else (bar - S) / S
         if lo <= dist <= hi:
             score = abs(dist - target)
             if best is None or score < best[0]:
-                best = (score, dist, p, ask, bar)
-    return S, best
+                best = (score, dist, p, ask, bar, S)
+    if best is None:
+        return next(iter(spots.values()))["S"], None   # price of the largest contract, for the message
+    return best[5], best[:5]
 
 
 def order_size(depot_value, ask):
@@ -214,8 +217,6 @@ def main():
         return
     parts = []
     done = True
-    # Which direction does the other depot hold? Rotation goes the opposite way.
-    other = {d: (v[0][1], v[0][2]) for d, v in live.items() if v}
 
     w = day_bet(today)
     if needed["A"] and w:
@@ -233,7 +234,7 @@ def main():
             # to the winning mark (gold put) is a placeholder there, and on 7 Sep 2026 it
             # had to be sold an hour later because SG listed new calls by 9:30.
             # Leave it empty, check hourly (the Watch).
-            parts.append(f"DEPOT A: no Brent call ≤2% (Brent {S:.2f}). Do NOT buy, no substitute. "
+            parts.append(f"DEPOT A: no Brent call ≤2% (Brent {num(S) if S else '?'}). Do NOT buy, no substitute. "
                          f"SG usually lists new ones by 9:30; the Watch checks hourly and sends the card.")
             done = False
     if needed["B"]:

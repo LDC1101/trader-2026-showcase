@@ -23,6 +23,7 @@ Usage:    python3 src/situation.py
 
 import argparse
 import datetime as dt
+import html
 import io
 import json
 import os
@@ -141,7 +142,8 @@ def feed_entries(xml, limit=25):
         t = re.search(r"<title[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", r, re.S)
         d = re.search(r"<(?:pubDate|updated|published)>(.*?)</", r, re.S)
         if t:
-            title = re.sub(r"<[^>]+>", "", t.group(1)).strip()
+            # CNBC titles arrive with entities such as &apos; inside CDATA
+            title = html.unescape(re.sub(r"<[^>]+>", "", t.group(1))).strip()
             out.append((title, (d.group(1)[:16] if d else "")))
     return out
 

@@ -24,6 +24,8 @@ TWO ERRORS FROM EARLIER VERSIONS distorted the result and are fixed here:
 Usage:    python3 src/tournament.py
 """
 
+import argparse
+
 import numpy as np
 
 RNG = np.random.default_rng(42)
@@ -174,6 +176,8 @@ def p_win(ours, field_sorted):
 
 
 def main():
+    argparse.ArgumentParser(description="Tournament simulation for Trader 2026: P(first place) per depot "
+                            "strategy, calibrated to the 2025 game. No options; runs in a few seconds.").parse_args()
     print("=" * 78)
     print("TRADER 2026: tournament math")
     print("=" * 78)

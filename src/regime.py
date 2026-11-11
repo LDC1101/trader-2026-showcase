@@ -206,7 +206,6 @@ def assess(days, status, history, today, brent=None):
     level, f10, f5 = sideways(days, today)
     week_list = weeks(days)
     done_weeks = [w for w in week_list if w["end"].weekday() == 4 or (today - w["end"]).days >= 3]
-    lw = done_weeks[-1] if done_weeks else None
     a, b = status.get("A"), status.get("B")
     best = max(a or 0, b or 0) or None
     ref, ref_date = last_friday_value(history, today)

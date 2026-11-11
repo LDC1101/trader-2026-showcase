@@ -67,13 +67,16 @@ CLAUDE = _claude_path()
 # Gold and silver as SPOT (XAU=, XAG=), not as COMEX futures (@GC.1, @SI.1):
 # the SG turbos are on XAUUSD. On 7 Sep 2026 the future was 1.1 % above spot
 # (4,444 vs 4,395); against a barrier at 4,450 that would have been a false knock-out.
-PRICES = {"Brent": "@LCO.1", "WTI": "@CL.1", "Gold": "XAU=", "Silver": "XAG=", "DAX": ".GDAXI"}
+PRICES = {"Brent": "@LCO.1", "WTI": "@CL.1", "Gold": "XAU=", "Silver": "XAG=", "DAX": ".GDAXI",
+          "Nasdaq": ".NDX"}
 PLACE_RE = re.compile(r"hormuz|iran|kharg|strait of|persian gulf|gulf of oman|tehran|houthi|trump|white house", re.I)
 # 17 Sep: Trump's peace signal slipped through the filter, hence peace, negotiat,
-# end of the war, envoy.
-ACTION_RE = re.compile(r"deal|agreement|accord|reopen|open(ing|s|ed)?\b|blockade|attack|strike|missile|"
-                       r"drone|tanker|ceasefire|truce|talks|sanction|closure|mine|peace|negotiat|"
-                       r"end (of )?the war|envoy", re.I)
+# end of the war, envoy. Whole words only: without the boundaries "accord" matched
+# "according", "mine" "determine" and "deal" "dealer".
+ACTION_RE = re.compile(r"\b(?:deals?|dealt|agreements?|accords?|reopen\w*|open(?:ing|s|ed)?|blockades?|"
+                       r"attack\w*|strikes?|struck|missiles?|drones?|tankers?|ceasefire|truce|talks|"
+                       r"sanction\w*|closures?|mines?|mined|peace|negotiat\w*|end (?:of )?the war|envoys?)\b",
+                       re.I)
 PM_TITLE = "Strait of Hormuz traffic returns to normal by October 31?"
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
@@ -149,12 +152,16 @@ def read_section(rel, start=None, end=None, limit=6000):
 
 # Prefixes of the Watch's own calls to action; they always reach the player.
 ACTIONS = ("KNOCK-OUT", "CLOSE WEEKLY LEG", "LIMIT ORDERS", "BRENT FAST", "NEAR BARRIER")
+# A replacement card that could not be built reaches the player too: after a knock-out
+# the player would otherwise not know that no re-entry is ready. A card that only says
+# "do not buy" stays out; the Watch sends the buy card hourly once SG lists one.
+CARD_FAILED = "could not be determined"
 BUY_RE = re.compile(r"\bBUY\b")   # a morning card that actually says buy
 
 
 def _depot_name(t):
     """The player reads Depot 1/2 on the game platform; internally they are A/B."""
-    return re.sub(r"\bDepot ([AB])\b", lambda m: "Depot " + ("1" if m.group(1) == "A" else "2"), t)
+    return re.sub(r"\b(Depot|DEPOT) ([AB])\b", lambda m: m.group(1) + " " + ("1" if m.group(2) == "A" else "2"), t)
 
 
 def log_full(text):
@@ -188,7 +195,8 @@ def for_player(header, now, assessment, alerts):
         lines.append("To do: nothing.")
     if fields.get("WHAT"):
         lines.append("Why: " + fields["WHAT"][:250])
-    actions = [m for m in alerts if m.startswith(ACTIONS) or BUY_RE.search(m)]
+    actions = [m for m in alerts if m.startswith(ACTIONS) or BUY_RE.search(m)
+               or (m.startswith("REPLACEMENT ORDER") and CARD_FAILED in m)]
     lines.extend(a[:400] for a in actions)
     if not fields and not actions:
         first = (alerts[0] if alerts else "").replace("HEADLINES\n", "")
@@ -225,17 +233,34 @@ def polymarket():
     return None
 
 
-YAHOO = {"Brent": "BZ=F", "WTI": "CL=F", "Gold": "GC=F", "Silver": "SI=F", "DAX": "%5EGDAXI"}
+# Yahoo has no intraday spot series for gold and silver, so these are COMEX futures,
+# while PRICES and the SG turbos use spot. extremes_since() therefore maps the Yahoo
+# lows and highs onto the price used for the barrier check (see basis_factor).
+YAHOO = {"Brent": "BZ=F", "WTI": "CL=F", "Gold": "GC=F", "Silver": "SI=F", "DAX": "%5EGDAXI",
+         "Nasdaq": "%5ENDX"}
 
 
-def extremes_since(name, since_epoch):
-    """Low and high of the underlying since `since_epoch`, from Yahoo 5-minute candles.
+def basis_factor(price_now, yahoo_last, tolerance=0.05):
+    """Factor that maps the Yahoo series onto the price the barrier is checked against.
+
+    Gold futures trade about 1 % above spot (7 Sep 2026: 4,444 vs 4,395); an unscaled
+    futures high would report a knock-out that did not happen. Above `tolerance` the two
+    series are not the same instrument (e.g. after a futures roll) and None is returned."""
+    if not price_now or not yahoo_last:
+        return 1.0
+    f = price_now / yahoo_last
+    return f if abs(f - 1) <= tolerance else None
+
+
+def extremes_since(name, since_epoch, price_now=None):
+    """Low and high of the underlying since `since_epoch`, from Yahoo 5-minute candles,
+    scaled onto `price_now` (the PRICES quote the barrier is compared with).
 
     Reason (16 Sep 2026): at 17:30 Brent broke the barrier 104.74 for a few
     minutes (low 104.06) and was back at 105.7 by the next 15-minute run; the
     Watch saw only the current price and never reported the knock-out. Returns
-    (None, None) if Yahoo does not answer; then only the current price counts,
-    as before."""
+    (None, None) if Yahoo does not answer or does not match; then only the
+    current price counts, as before."""
     sym = YAHOO.get(name)
     if not sym or not since_epoch:
         return None, None
@@ -246,7 +271,12 @@ def extremes_since(name, since_epoch):
         q = r["indicators"]["quote"][0]
         lows = [l for ts, l in zip(r["timestamp"], q["low"]) if l and ts >= since_epoch - 300]
         highs = [h for ts, h in zip(r["timestamp"], q["high"]) if h and ts >= since_epoch - 300]
-        return (min(lows) if lows else None, max(highs) if highs else None)
+        closes = [c for c in q.get("close", []) if c]
+        f = basis_factor(price_now, closes[-1] if closes else None)
+        if f is None:
+            log(f"Yahoo extremes {name}: series does not match the quote {price_now}, ignored")
+            return None, None
+        return (min(lows) * f if lows else None, max(highs) * f if highs else None)
     except Exception as e:
         log(f"Yahoo extremes {name}: {type(e).__name__}")
         return None, None
@@ -303,22 +333,38 @@ def open_positions(text=None):
     return out
 
 
+def parse_cot(txt):
+    """Managed Money net for Brent and gold from the CFTC disaggregated futures file.
+
+    Column layout (0-based): 2 report date, 7 open interest, 8/9 producer long/short,
+    10/11/12 swap dealer long/short/spread, 13/14/15 managed money long/short/spread.
+    Earlier versions read columns 10 and 11, i.e. swap dealers under the Managed Money
+    label (checked 11 Nov 2026: the columns add up to open interest only in this layout).
+    The market name must start with the contract: "MICRO GOLD - COMMODITY EXCHANGE"
+    follows the gold row and used to overwrite it."""
+    out = {}
+    for line in txt.splitlines():
+        r = [c.strip().strip('"') for c in line.split(",")]
+        if r[0].startswith("BRENT LAST DAY"):
+            name = "Brent"
+        elif r[0].startswith("GOLD - COMMODITY EXCHANGE"):
+            name = "Gold"
+        else:
+            continue
+        try:
+            out[name] = dict(date=r[2], net=int(r[13]) - int(r[14]))
+        except (IndexError, ValueError):
+            pass
+    return out
+
+
 def cot():
     """Managed Money net for Brent and gold from the current COT report."""
     try:
         txt = fetch("https://www.cftc.gov/dea/newcot/f_disagg.txt", BROWSER_UA)
     except Exception as e:
         log(f"COT: {type(e).__name__}"); return None
-    out = {}
-    for line in txt.splitlines():
-        if "BRENT LAST DAY" in line or "GOLD - COMMODITY EXCHANGE" in line:
-            r = [c.strip().strip('"') for c in line.split(",")]
-            try:
-                name = "Brent" if "BRENT" in line else "Gold"
-                out[name] = dict(date=r[2], net=int(r[10]) - int(r[11]))
-            except Exception:
-                pass
-    return out or None
+    return parse_cot(txt) or None
 
 
 def replacement_card(depot):
@@ -335,7 +381,7 @@ def replacement_card(depot):
         log(f"replacement order {d}: rc={r.returncode} {r.stderr.strip()[-160:]!r}")
     except Exception as e:
         log(f"replacement order {d}: {type(e).__name__} {e}")
-    return f"REPLACEMENT ORDER DEPOT {d}: could not be determined; run python3 src/morning_card.py --depot {d} --text-only"
+    return f"REPLACEMENT ORDER DEPOT {d}: {CARD_FAILED}; run python3 src/morning_card.py --depot {d} --text-only"
 
 
 # ---- Assessment by Claude (headless) ---------------------------------------
@@ -442,6 +488,38 @@ def wants_check(line):
     return bool(re.search(r"\bcheck\b", _action_body(line)))
 
 
+def remember(memory, keys, limit):
+    """Adds unseen keys to the memory in arrival order and keeps the newest `limit`.
+    Returns (new keys, trimmed memory). A sorted set would keep the alphabetically
+    last keys instead, so headlines starting with an early letter were forgotten
+    and alerted again on every run."""
+    seen = set(memory)
+    fresh = []
+    for k in keys:
+        if k and k not in seen:
+            seen.add(k)
+            fresh.append(k)
+    return fresh, (list(memory) + fresh)[-limit:]
+
+
+def header_for(result, alerts):
+    """Header of the player's message from the assessment and the source gate."""
+    action_line = next((z for z in result.splitlines() if z.startswith("ACTION")), "")
+    if "EVIDENCED: no (without council)" in result:
+        # The fallback without the Council may only ask for a check; consult_or_assess
+        # already rewrote buy/close to "check (without council)".
+        return ("WATCH" if wants_check(action_line) or wants_action(action_line) else ""), result
+    act = wants_action(action_line)
+    if act and not (sources.may_trigger(alerts) or "EVIDENCED: yes" in result):
+        # Gate (7 Sep 2026): tier-3/4 sources do not trigger an action.
+        log(f"Gate: action on an S3/S4 source downgraded: {action_line[:80]!r}")
+        result = re.sub(r"^ACTION: *", "ACTION: nothing yet, source unconfirmed. Under review: ", result, count=1, flags=re.M)
+        return "WATCH (source not yet confirmed)", result
+    if act:
+        return "ALERT: ACT", result
+    return ("WATCH" if wants_check(action_line) else ""), result
+
+
 def acquire_lock():
     """One run at a time: the Council can take minutes, launchd starts every 15."""
     import fcntl
@@ -512,15 +590,11 @@ def main():
                 st["fast_alerted"] = [now.timestamp(), move]
 
     # Headlines
-    seen = set(st.get("headlines", []))
-    new = []
+    text_of = {}
     for source, title in headlines():
-        key = re.sub(r"\W+", " ", title.lower()).strip()[:120]
-        if key not in seen:
-            seen.add(key)
-            if not first:
-                new.append(f"[{source}] {title}")
-    st["headlines"] = sorted(seen)[-400:]
+        text_of.setdefault(re.sub(r"\W+", " ", title.lower()).strip()[:120], f"[{source}] {title}")
+    fresh, st["headlines"] = remember(st.get("headlines", []), list(text_of), 400)
+    new = [] if first else [text_of[k] for k in fresh]
     if a.probe:
         new.append(a.probe)
     if new:
@@ -546,7 +620,7 @@ def main():
         if k is None or wkn in ko_alerted:
             continue
         if name not in extremes:
-            extremes[name] = extremes_since(name, since)
+            extremes[name] = extremes_since(name, since, k)
         low, high = extremes[name]
         # Low/high since the last run counts, not just the price now (16 Sep 2026, FG6MRT)
         checked = min(k, low) if (direction == "long" and low) else (max(k, high) if (direction == "short" and high) else k)
@@ -641,6 +715,7 @@ def main():
         st["regime_day"] = now.strftime("%Y-%m-%d")
 
     # Send
+    before = st.get("brent_last_run")   # read before this run's price replaces it
     st["last_run"] = now.strftime("%Y-%m-%d %H:%M")
     st["last_run_epoch"] = now.timestamp()
     if brent:
@@ -651,23 +726,11 @@ def main():
         send_telegram(text, a.test)
     elif alerts:
         full = f"{short_date(now)}\n" + "\n\n".join(alerts)
-        before = st.get("brent_last_run")
         delta = f"{brent/before-1:+.2%} (from {before:.2f})" if (brent and before) else "no previous value"
         result = consult_or_assess(alerts, prices, p, delta)
         header = ""
         if result:
-            action_line = next((z for z in result.splitlines() if z.startswith("ACTION")), "")
-            act = wants_action(action_line)
-            council_evidenced = "EVIDENCED: yes" in result
-            if act and not (sources.may_trigger(alerts) or council_evidenced):
-                # Gate (7 Sep 2026): tier-3/4 sources do not trigger an action.
-                log(f"Gate: action on an S3/S4 source downgraded: {action_line[:80]!r}")
-                header = "WATCH (source not yet confirmed)"
-                result = re.sub(r"^ACTION: *", "ACTION: nothing yet, source unconfirmed. Under review: ", result, count=1, flags=re.M)
-            elif act:
-                header = "ALERT: ACT"
-            elif wants_check(action_line):
-                header = "WATCH"
+            header, result = header_for(result, alerts)
             full += "\n\nASSESSMENT\n" + result
             try:
                 sig = result.splitlines()[0].replace("SIGNAL:", "").strip()

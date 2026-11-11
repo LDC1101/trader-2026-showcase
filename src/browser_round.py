@@ -89,7 +89,8 @@ def main():
         return
     st = load_json(STATE)
     first = not st
-    seen = set(st.get("seen", []))
+    memory = list(st.get("seen", []))   # arrival order, so trimming drops the oldest
+    seen = set(memory)
     d = read_pages()
     if not d:
         return
@@ -99,11 +100,12 @@ def main():
         if not key or key in seen:
             continue
         seen.add(key)
+        memory.append(key)
         q, t = e.get("source", "?"), e.get("text", "")
         relevant = q.startswith(ALWAYS_RELEVANT) or bool(PLACE_RE.search(t) and ACTION_RE.search(t))
         if relevant and not first:
             new.setdefault(q, []).append(f"[{q}|S{sources.tier(q)}] {t}" + (f" ({e['url']})" if e.get("url") else ""))
-    st["seen"] = sorted(seen)[-4000:]
+    st["seen"] = memory[-4000:]
     st["last_run"] = now.strftime("%Y-%m-%d %H:%M")
     if not a.test:
         write_json(STATE, st)

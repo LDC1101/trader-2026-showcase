@@ -35,6 +35,8 @@ def limits(depot_value, ask, leveraged, already_leveraged=0.0, already_position=
     already_position  purchase value already held in THIS security.
                       The 20% rule applies "in total", so cumulatively.
     """
+    if ask <= 0 or depot_value <= 0:
+        raise ValueError("depot value and ask must be above 0")
     max_position = 0.20 * depot_value - already_position   # 20% rule, cumulative
     caps = [("20% of depot value (cumul.)", max_position)]
 
@@ -68,6 +70,8 @@ def main():
     ap.add_argument("--already-position", type=float, default=0.0,
                     help="already held in THIS security (EUR, purchase value)")
     a = ap.parse_args()
+    if a.depot_value <= 0 or a.ask <= 0:
+        ap.error("depot value and --ask must be above 0")
 
     units, order_value, fee, caps = limits(
         a.depot_value, a.ask, a.leveraged, a.already, a.already_position)
@@ -79,9 +83,11 @@ def main():
         print(f"  Already lev.   {a.already:>14,.2f} EUR")
     if a.already_position:
         print(f"  of which in THIS security {a.already_position:>7,.2f} EUR")
-    print(f"\n  Binding caps:")
+    print("\n  Binding caps:")
     for name, value in sorted(caps, key=lambda x: x[1]):
-        mark = " <-- binds" if abs(value - order_value) < a.ask else ""
+        # Volume caps include the fee (limits() subtracts it before rounding to units)
+        binds = min(abs(value - order_value), abs(value - order_value - fee)) < a.ask
+        mark = " <-- binds" if binds else ""
         print(f"    {name:<28}{max(value, 0):>14,.2f} EUR{mark}")
 
     print(f"\n  MAXIMUM  {units:>10,} units  =  {order_value:>12,.2f} EUR")

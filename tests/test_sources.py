@@ -66,6 +66,21 @@ class Gate(unittest.TestCase):
         m = ["BRENT 101.20 $: +4.1% since the last alert (97.20)."]
         self.assertTrue(sources.may_trigger(m))
 
+    def test_reminders_and_cards_are_not_evidence(self):
+        # Monday reminder or an order card next to a state-media headline must not open the gate
+        for block in ("LIMIT ORDERS: 7-day validity; renew today for every live position (67.5 x ask).",
+                      "REPLACEMENT ORDER DEPOT A\nDEPOT A: BUY Oil Brent Future LONG (Call)",
+                      "NEAR BARRIER: A FG6MRT (Brent long, barrier 104.74): price 105.20, only 0.4% away."):
+            m = [block, "HEADLINES\n• [IRNA English|S3] Strait of Hormuz reopened, deal signed"]
+            self.assertFalse(sources.may_trigger(m), block[:20])
+
+    def test_untagged_headline_is_not_evidence(self):
+        self.assertFalse(sources.may_trigger(["HEADLINES\n• Hormuz reopened, deal signed"]))
+
+    def test_fast_move_and_polymarket_are_measurements(self):
+        self.assertTrue(sources.may_trigger(["BRENT FAST: 96.10 $, -1.8% in one hour (from 97.86). No Brent position open."]))
+        self.assertTrue(sources.may_trigger(["POLYMARKET Hormuz normal by 31 Oct: 41.0 % (before 33.0 %)."]))
+
     def test_state_media_plus_social_stays_closed(self):
         m = ["HEADLINES\n• [IRNA English|S3] deal", "X SEARCH\n• [X search|S4] deal", "R/GEOPOLITICS\n• [r/geopolitics|S4] deal"]
         self.assertFalse(sources.may_trigger(m))

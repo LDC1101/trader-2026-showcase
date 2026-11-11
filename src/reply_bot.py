@@ -10,6 +10,7 @@ Runs under launchd with KeepAlive (template in ops/launchd/). Stop it with
   launchctl bootout gui/$(id -u)/<label>
 """
 
+import argparse
 import io
 import json
 import os
@@ -70,6 +71,8 @@ QUESTION: {question}"""
 
 
 def main():
+    argparse.ArgumentParser(description="Telegram reply bot: answers the player's questions with one `claude -p` "
+                            "call in the repo per message. Long polling, runs until stopped; needs .env.").parse_args()
     e = load_env()
     token, chat = e.get("TELEGRAM_BOT_TOKEN"), e.get("TELEGRAM_CHAT_ID")
     if not token or not chat:

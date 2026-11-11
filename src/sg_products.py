@@ -114,6 +114,26 @@ def implied_spot(calls, puts):
     return s_c, fx_c, s_p, fx_p
 
 
+def spots_by_contract(calls, puts):
+    """Implied underlying price per contract (AssetName), largest contract first.
+
+    SG lists products on several futures months at once (11 Nov 2026: seven Brent
+    contracts among the Classic turbos, calls and puts 24 % apart when fitted as one).
+    A single line through all of them mixes prices several dollars apart, so every
+    distance derived from it is wrong. Contracts with too few products are left out."""
+    groups = {}
+    for side, px in ((0, calls), (1, puts)):
+        for p in px:
+            groups.setdefault(p.get("AssetName"), ([], []))[side].append(p)
+    out = {}
+    for name, (c, pu) in sorted(groups.items(), key=lambda kv: -(len(kv[1][0]) + len(kv[1][1]))):
+        s_c, fx_c, s_p, fx_p = implied_spot(c, pu)
+        S = (s_c + s_p) / 2 if (s_c and s_p) else (s_c or s_p)
+        if S:
+            out[name] = dict(S=S, s_c=s_c, s_p=s_p, fx=fx_c or fx_p, calls=c, puts=pu)
+    return out
+
+
 def table(px, S, direction, lo, hi, n):
     rows = []
     seen = set()
@@ -157,34 +177,32 @@ def main():
             puts = products(aid, cl, 1)
             if not calls and not puts:
                 P(f"## {name}, {clname}: no products"); P(""); continue
-            s_c, fx_c, s_p, fx_p = implied_spot(calls, puts)
-            S = s_c if s_c else s_p
-            if s_c and s_p:
-                S = (s_c + s_p) / 2
-                if abs(s_c - s_p) / S > 0.01:
-                    P(f"**WARNING {name} {clname}: call and put prices differ by {abs(s_c-s_p)/S:.1%}, distances uncertain, check against a live price on Monday.**")
+            spots = spots_by_contract(calls, puts)
+            if not spots:
+                P(f"## {name}, {clname}: {len(calls)} calls, {len(puts)} puts, too few tradeable products to derive the price")
+                P(""); continue
+            for contract, c in spots.items():
+                S, s_c, s_p = c["S"], c["s_c"], c["s_p"]
+                currency = (c["calls"] or c["puts"])[0].get("AssetCurrency", "")
+                P(f"## {name}, {clname}, {contract}: {len(c['calls'])} calls, {len(c['puts'])} puts")
+                P("")
+                if s_c and s_p and abs(s_c - s_p) / S > 0.01:
+                    P(f"**WARNING: call and put prices differ by {abs(s_c-s_p)/S:.1%}, distances uncertain, check against a live price.**")
                     P("")
-            months = sorted(set(p.get("AssetName") for p in calls + puts))
-            if len(months) > 1:
-                P(f"Note: {len(months)} different contracts mixed ({', '.join(m[:28] for m in months[:4])}...). Price derivation only makes sense per contract.")
+                P(f"S implied from calls {s_c if s_c else float('nan'):.2f} {currency}, from puts {s_p if s_p else float('nan'):.2f}; "
+                  f"FX*ratio {c['fx'] if c['fx'] else float('nan'):.4f}")
                 P("")
-            currency = calls[0]["AssetCurrency"] if calls else puts[0]["AssetCurrency"]
-            P(f"## {name}, {clname}: {len(calls)} calls, {len(puts)} puts")
-            P("")
-            P(f"S implied from calls {s_c if s_c else float('nan'):.2f} {currency}, from puts {s_p if s_p else float('nan'):.2f}; "
-              f"FX*ratio from calls {fx_c if fx_c else float('nan'):.4f}")
-            P("")
-            for direction, px in (("Call", calls), ("Put", puts)):
-                rows = table(px, S, direction, args.min, args.max, args.n)
-                P(f"### {direction} ({'long' if direction=='Call' else 'short'})")
-                P("")
-                if not rows:
-                    P("no products in the filter"); P(""); continue
-                P("| Distance | WKN | Barrier | Leverage | Bid | Ask | Spread | max. EUR (20k units) | Quanto | Ratio | Underlying |")
-                P("|---:|---|---:|---:|---:|---:|---:|---:|:-:|---:|---|")
-                for dist, wkn, bar, lev, bid, ask, spread, q, ratio, an in rows:
-                    P(f"| {dist:.2%} | **{wkn}** | {bar:.2f} | {lev:.0f} | {bid:.2f} | {ask:.2f} | {spread:.1%} | {min(20000, 20000*ask):,.0f} | {q} | {ratio:g} | {an} |")
-                P("")
+                for direction, px in (("Call", c["calls"]), ("Put", c["puts"])):
+                    rows = table(px, S, direction, args.min, args.max, args.n)
+                    P(f"### {direction} ({'long' if direction=='Call' else 'short'})")
+                    P("")
+                    if not rows:
+                        P("no products in the filter"); P(""); continue
+                    P("| Distance | WKN | Barrier | Leverage | Bid | Ask | Spread | max. EUR (20k units) | Quanto | Ratio | Underlying |")
+                    P("|---:|---|---:|---:|---:|---:|---:|---:|:-:|---:|---|")
+                    for dist, wkn, bar, lev, bid, ask, spread, q, ratio, an in rows:
+                        P(f"| {dist:.2%} | **{wkn}** | {bar:.2f} | {lev:.0f} | {bid:.2f} | {ask:.2f} | {spread:.1%} | {min(20000, 20000*ask):,.0f} | {q} | {ratio:g} | {an} |")
+                    P("")
     text = "\n".join(out)
     print(text)
     if args.write:
