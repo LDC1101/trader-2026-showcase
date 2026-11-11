@@ -1,6 +1,6 @@
 # Instruments and product selection
 
-*Written 5–6 Sep for positions held toward the winning mark. The day bets from 17 Sep used about 3% barrier distance on one-day turbos on US stocks; see season/README.md.*
+*Written 5–6 Sep for positions held toward the winning mark. The day bets from 17 Sep used wider barriers: 2.5–5.3% on AMD, about 5% on Brent, 9.6–11.7% on the Tesla and Seagate earnings bets; see season/README.md.*
 
 ## The decision rule
 
@@ -65,7 +65,9 @@ Only the direction holds up:
 - **beyond about 4% distance** the leverage is no longer enough to turn €20,000 into a seven-figure
   position
 - **very tight barriers** die of noise before the move arrives
-- **more volatility in the underlying helps in every constellation**
+- **more volatility in the underlying helps in every constellation** (the current grid in
+  `src/tournament.py` does not support this: at 0.5% distance more volatility lowers the chance,
+  because the tight barrier is hit sooner)
 
 **Correction of 5 Sep 2026.** This section used to say "two to three daily volatilities of
 distance, for oil 8–12%" (the pre-game strategy said one to two weekly volatilities). That was

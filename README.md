@@ -1,10 +1,12 @@
 # Trader 2026
 
-A research and decision-support system built with [Claude Code](https://claude.com/claude-code)
-for **Trader 2026**, Société Générale's online trading game (7 Sep to 30 Oct 2026, play
-money). It simulated the tournament to find a strategy that could win at all, watched the news
-every 15 minutes, had five AI agents cross-check every headline, and sent finished orders to
-the player's phone. Every order was typed by hand: the game bans automated trading.
+A research and decision-support system for **Trader 2026**, Société Générale's online trading
+game (7 Sep to 30 Oct 2026, play money). The game does not allow automated trading, so the work
+was split: AI did the research and the arithmetic, the player made every decision and typed every
+order by hand. The system simulated the tournament to find a strategy that could win at all,
+watched the news every 15 minutes, had five AI agents cross-check every headline, and sent
+finished order cards to the player's phone. The code and documents were written with
+[Claude Code](https://claude.com/claude-code).
 
 **Result: Depot A more than doubled (over +100 % from €100,000), top 1 % out of 23,982 participants.**
 
@@ -18,15 +20,31 @@ the player's phone. Every order was typed by hand: the game bans automated tradi
 Brent BEST turbo call bought at €1.38 and sold three days later at €5.59 (+305 %, +€60,991).
 Three knock-outs, all in the first ten days. Full record: [`season/README.md`](season/README.md).
 
-## The constraint that shaped everything
+## How AI was used, and where it stopped
 
-Rule 10 of the game bans automated trading systems; a violation or reasonable suspicion means
-exclusion without a hearing. So the system has no access to the game account, never opens the
-game website, and never places an order. Its output is always a message: WKN, limit, units,
-validity. The player decided and typed. Platform-native stop-loss and limit orders are allowed
-and were the only "automation" on the trading side.
+Rule 10 of the game (translated): "Prohibited: manipulative behaviour, multiple user names, and
+unauthorised aids (for example automated trading systems)." A violation or a justified suspicion
+leads to exclusion without a hearing.
 
-## The math behind the strategy
+The rules give no definition of "unauthorised aids" beyond that example. We read it as a ban on
+anything that trades for the player and drew the line at who triggers the order: research,
+screeners and calculators are aids every player uses, a script connected to the depot is not.
+
+| AI | The player |
+|---|---|
+| simulated the tournament and proposed the strategy | chose the strategy, and changed it on 17 Sep |
+| read the news every 15 minutes, rated each source, ran the five-agent Council | decided whether an alert called for action |
+| found the SG turbo and computed WKN, limit and units for each order card | typed every order on the game platform |
+| wrote the daily briefings and weekly reviews | set the platform's own stop-loss and limit orders |
+| answered questions over Telegram | logged every trade in [`depot/positions.md`](depot/positions.md) |
+
+The system never had a login to the game, never opened the game website and never placed,
+changed or cancelled an order. Its output was always a message. The platform's stop-loss and
+limit orders were the only automatic exits.
+
+## The strategy
+
+### Why leverage, and why one position
 
 `src/tournament.py` simulates the whole field (about 30,000 players with two depots each),
 calibrated to the 2025 game, where the winner reached €1.35M (13.5×). 250,000 simulated
@@ -47,10 +65,53 @@ path to a million is one position that grows past the limit after purchase. Taki
 €20,000 may go back in, so gains add instead of compound. Details and abort conditions:
 [`strategy/00-thesis.md`](strategy/00-thesis.md).
 
-The plan: €20,000 in one turbo on Brent crude (the Strait of Hormuz had been closed for 188
-days at the start of the game), hold, re-enter right after a knock-out, play the second depot
-in the opposite direction. From 17 Sep the player chose day bets with profit-taking instead;
-the season record shows how both played out.
+### Phase 1, 7 to 16 Sep: one turbo held toward the winning mark
+
+- **Underlying: Brent crude.** The Strait of Hormuz had been closed for 188 days when the game
+  started, and oil moved more than anything else the system tracked.
+- **One SG BEST turbo per depot**, €20,000, as close to the barrier as SG offered (about 1.5 to
+  2.5 %). Turbos carry no
+  volatility premium, which mattered with oil volatility at war levels
+  ([`strategy/20-instruments.md`](strategy/20-instruments.md)).
+- **No profit-taking below €500,000.** A sell limit at the winning mark (67.5 × entry) went in
+  with the buy.
+- **After a knock-out, re-enter at once**, and reset the depot when it is below €100,000.
+- **Depot B in the opposite direction**, because only the better depot counts.
+- **Abort conditions fixed in advance**: a reported Hormuz agreement closes the long depot,
+  three knock-outs in a row switch from turbos to warrants, below €300,000 after week 5 the main
+  prize is written off. Full list in [`strategy/00-thesis.md`](strategy/00-thesis.md).
+
+Outcome: the Brent call FG6GK5 went from €1.38 to €5.59 in three days (+305 %), then three
+knock-outs followed within ten days. Depot A stood at €141,455 on 16 Sep; Depot B was parked on
+15 Sep.
+
+### Phase 2, 17 Sep to 30 Oct: day bets that took every gain
+
+On 17 Sep the player wrote off the main prize and ran Depot A as single bets out of cash:
+
+- The player chose the bet the evening before ([`depot/examples/bet.json`](depot/examples/bet.json)
+  shows the format); the 8:05 morning card turned it into WKN, limit and units.
+- Brent calls about 5 % from the barrier, held two to four days; AMD calls at 2.5 to 5.3 %;
+  earnings bets on Tesla (9.6 %) and Seagate (11.7 %).
+- Every gain was taken. From mid-October a buy alert in GitHub Actions flagged pullback entries
+  on Brent.
+
+Outcome: all seven recorded bets after 17 Sep were profitable and none was knocked out. Depot A
+grew from €141,455 to over €200,000. Each new bet was capped at €20,000 again, so the gains
+added up instead of compounding, as the factor-93 calculation predicts. The final review calls it
+a deliberate choice of a solid rank over a lottery tail.
+
+### Rules for every order
+
+- Game limits, checked with [`src/sizing.py`](src/sizing.py) before each order: at most €20,000
+  and at most 20 % of the depot in leveraged products, at most 20,000 units, at most 20 % of the
+  depot in any one security.
+- Every order card named the exit along with the entry: a sell limit, or a sell time for day
+  bets.
+- Only a tier-1 source, or two independent tier-2 sources, could trigger an action. State media
+  and social media could only raise a watch ([`strategy/90-sources.md`](strategy/90-sources.md)).
+
+The season record ([`season/README.md`](season/README.md)) lists every trade.
 
 ## How it worked
 
@@ -105,11 +166,6 @@ without scrolling.
 
 - **The topic held.** The Strait of Hormuz stayed closed for all eight weeks and Brent went
   from about $96 to $115–117, more movement than any other underlying the system tracked.
-- **The factor-93 rule held in reverse.** From 17 Sep the player switched to day bets and took
-  every profit. All seven recorded bets after that were profitable and none was knocked out,
-  and Depot A grew to over €200,000 in that second half. Each new bet was capped at €20,000 again, so the
-  gains added up instead of compounding, and the €1.35M winning mark was out of reach. The
-  final review calls it a deliberate choice of a solid rank over a lottery tail.
 - **Knock-outs clustered early.** All three came in the first ten days, at 1.5–2.5 % distance
   to the barrier on entry. Later bets were held for hours to days and mostly used wider
   barriers (about 5 % on the Brent calls, 9.6 % on the Tesla call); none was knocked out.
@@ -164,5 +220,6 @@ game ended.
 - A browser-based research round (X, UKMTO, Reddit through a logged-in browser) ran until
   22 Oct 2026 and was then retired for security reasons; the code is kept in
   [`src/browser_round.py`](src/browser_round.py) for reference and does not run by default.
-- No credentials are in this repository. The original working repos are private and in German;
-  this is a cleaned English edition with a fresh history.
+- No credentials or logins are in this repository: no API keys, tokens, account names or session
+  data. The original working repos are private and in German; this is a cleaned English edition
+  with a fresh history.
