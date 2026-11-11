@@ -1,0 +1,4 @@
+{"depot": "A", "wkn": "FG8V8A", "asset": -4, "name": "Brent", "direction": "call",
+ "barrier": 98.67, "trigger": 104.2, "stake": 20000, "markup": 0.05,
+ "valid_until": "2026-10-23", "repeat_min": 120, "max_per_day": 3,
+ "note": "Sell target as last time: Brent 106.5-107 or +40%."}
