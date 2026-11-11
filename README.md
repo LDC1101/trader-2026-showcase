@@ -1,11 +1,12 @@
 # Trader 2026
 
 A research and decision-support system for **Trader 2026**, Société Générale's online trading
-game (7 Sep to 30 Oct 2026, play money). The game does not allow automated trading, so the work
-was split: AI did the research and the arithmetic, the player made every decision and typed every
-order by hand. The system simulated the tournament to find a strategy that could win at all,
-watched the news every 15 minutes, had five AI agents cross-check every headline, and sent
-finished order cards to the player's phone. The code and documents were written with
+game (7 Sep to 30 Oct 2026, play money). It was built for one player, a student who played next
+to full-time studies. The game does not allow automated trading, so the work was split: AI did
+the research and the arithmetic, the player made every decision and typed every order by hand.
+The system simulated the tournament to find a strategy that could win at all, watched the news
+every 15 minutes, had five AI agents cross-check every headline, and sent finished order cards to
+the player's phone. The code and documents were written with
 [Claude Code](https://claude.com/claude-code).
 
 **Result: Depot A more than doubled (over +100 % from €100,000), top 1 % out of 23,982 participants.**
@@ -18,7 +19,7 @@ finished order cards to the player's phone. The code and documents were written 
 
 14 positions over eight weeks, 10 wins and 3 losses with a recorded outcome. Best trade: a
 Brent BEST turbo call bought at €1.38 and sold three days later at €5.59 (+305 %, +€60,991).
-Three knock-outs, all in the first ten days. Full record: [`season/README.md`](season/README.md).
+Three knock-outs, all in the first ten days. All trades are listed under [Every trade](#every-trade).
 
 ## How AI was used, and where it stopped
 
@@ -41,6 +42,24 @@ screeners and calculators are aids every player uses, a script connected to the 
 The system never had a login to the game, never opened the game website and never placed,
 changed or cancelled an order. Its output was always a message. The platform's stop-loss and
 limit orders were the only automatic exits.
+
+## Built around a student's schedule
+
+The player studied full time and could not watch prices during the day. High-frequency or
+intraday screen trading was never an option, so the system was built for a few well-prepared
+decisions instead:
+
+- **Few positions, held for hours to days.** 14 positions in eight weeks, fewer than two a week.
+  Each arrived as a finished order card with WKN, limit and units, so the player only had to
+  check it and type it in.
+- **The exit decided at entry.** Each order card named the exit along with the buy: a sell limit
+  placed as a platform order, or a fixed sell time for a day bet. An open position did not need
+  watching.
+- **Silent unless something happened.** The Watch looked every 15 minutes but wrote only on a
+  trigger: a knock-out, a Brent move of 3 %, a Hormuz headline. Each message fit on a phone
+  screen: what it means for the depots, what to do, one sentence why.
+- **Fixed times.** The order card at 8:05, the daily report at 21:00 on weekdays, the weekly
+  review on Sundays.
 
 ## The strategy
 
@@ -70,8 +89,7 @@ path to a million is one position that grows past the limit after purchase. Taki
 - **Underlying: Brent crude.** The Strait of Hormuz had been closed for 188 days when the game
   started, and oil moved more than anything else the system tracked.
 - **One SG BEST turbo per depot**, €20,000, as close to the barrier as SG offered (about 1.5 to
-  2.5 %). Turbos carry no
-  volatility premium, which mattered with oil volatility at war levels
+  2.5 %). Turbos carry no volatility premium, which mattered with oil volatility at war levels
   ([`strategy/20-instruments.md`](strategy/20-instruments.md)).
 - **No profit-taking below €500,000.** A sell limit at the winning mark (67.5 × entry) went in
   with the buy.
@@ -106,12 +124,41 @@ a deliberate choice of a solid rank over a lottery tail.
 - Game limits, checked with [`src/sizing.py`](src/sizing.py) before each order: at most €20,000
   and at most 20 % of the depot in leveraged products, at most 20,000 units, at most 20 % of the
   depot in any one security.
-- Every order card named the exit along with the entry: a sell limit, or a sell time for day
-  bets.
 - Only a tier-1 source, or two independent tier-2 sources, could trigger an action. State media
   and social media could only raise a watch ([`strategy/90-sources.md`](strategy/90-sources.md)).
 
-The season record ([`season/README.md`](season/README.md)) lists every trade.
+## Every trade
+
+All 14 positions of the season, all SG BEST turbos. Net results include the €3.90 order fee on
+each side.
+
+| # | Depot | Held | Underlying | WKN | Type | Return | Net result |
+|---:|---|---|---|---|---|---:|---:|
+| 1 | A | 7 Sep, same day | Gold | FG6SFQ | put | +1.2 % | +€232 |
+| 2 | A | 7–10 Sep | Brent | FG6GK5 | call | +305.1 % | +€60,991 |
+| 3 | A | 15–16 Sep | Brent | FG6MRT | call | knock-out | −€19,764 |
+| 4 | A | 17 Sep, ten minutes | Brent | FG6SKV | put | ~+7.1 % | ~+€1,400 |
+| 5 | A | 17–18 Sep | AMD | not recorded [1] | call | not recorded | ~+€18,840 [2] |
+| 6 | A | 21–24 Sep | AMD | FG7EGK | call | +91.6 % | +€17,662 |
+| 7 | A | 24 Sep, sold by 5 Oct | AMD | FG7KMN | call | +138.4 % [2] | +€26,856 [2] |
+| 8 | A | 5–9 Oct | Brent | FG7MXN | call | +58.1 % | +€11,322 |
+| 9 | A | 12–14 Oct | Brent | FG8V8A | call | +41.3 % | +€8,179 |
+| 10 | A | 21–26 Oct | Tesla | FG8GV8 | call | +34.5 % | +€6,751 |
+| 11 | A | 27 Oct, order | Seagate | FE4E7Y | call | not recorded | not recorded [3] |
+| 12 | B | 7–8 Sep | Brent | FC8QQU | put | knock-out | −€16,372 |
+| 13 | B | 8 Sep, same day | Brent | FG6GLL | call | +8.1 % | +€1,352 |
+| 14 | B | 8–11 Sep | Gold | FG6PCD | call | knock-out | −€19,502 |
+
+Depot B was reset to €100,000 on 8 Sep after trade 12. "~" marks figures the player gave as
+approximate.
+
+1. The order card recommended FG7EES; units, prices and the number of intraday round trips were
+   not recorded.
+2. Derived from the cash balances, because the sale was not logged.
+3. The fill and the exit were never recorded.
+
+Entry and exit prices, the reason for each trade and the cash reconciliation are in
+[`season/README.md`](season/README.md) and [`depot/positions.md`](depot/positions.md).
 
 ## How it worked
 
