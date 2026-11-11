@@ -267,3 +267,4 @@ game ended.
 - No credentials or logins are in this repository: no API keys, tokens, account names or session
   data. The original working repos are private and in German; this is a cleaned English edition
   with a fresh history.
+- Code and documents are under the [MIT License](LICENSE).
